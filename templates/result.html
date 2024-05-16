@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Route Finder</title>
+    <style>
+        #map {
+            height: 80vh;
+            width: 100%;
+        }
+    </style>
+</head>
+<body onload="updatePath()">
+    <div>
+        <label for="speed">Animation Speed:</label>
+        <input type="number" id="speed" min="1" max="100" value="20">
+        <button onclick="changeSpeed()">Apply Speed</button>
+    </div>
+    <div id="map"></div>
+
+    <!-- Display the graph image -->
+    <img src="{{ img_path }}" alt="Graph">
+    <hr>
+
+    <!-- Form to choose start and end nodes -->
+    <h2>Select Start and End Nodes</h2>
+    <form id="nodeForm">
+        <label for="startNode">Start Node:</label>
+        <select id="startNode" name="startNode">
+            {% for node in nodes %}
+            <option value="{{ node }}" {% if node == default_start_node %}selected{% endif %}>{{ node }}</option>
+            {% endfor %}
+        </select>
+        <label for="endNode">End Node:</label>
+        <select id="endNode" name="endNode">
+            {% for node in nodes %}
+            <option value="{{ node }}" {% if node == default_end_node %}selected{% endif %}>{{ node }}</option>
+            {% endfor %}
+        </select>
+        <button type="button" onclick="updatePath()">Update Path</button>
+    </form>
+
+    <hr>
+
+    <!-- Print the shortest path and distance -->
+    <h2>Shortest Path Information</h2>
+    <p id="shortestPathInfo">{{ shortest_path_info | safe }}</p>
+    
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAkrFYkxmtHZHod1Xd2b7OkGFsnto59oyQ&libraries=geometry,directions"></script>
+    <script>
+        let map;
+        let marker;
+        let numSteps = 20; // Default animation speed
+        let animationTimeout; // To hold reference to current animation loop
+        let pathPolyline;
+
+        var routeData = {{ coordinates | tojson }};
+        function initMap(route) {
+            const routeSequence = route; // Customize route sequence here
+            const arrangedRouteData = routeSequence.map(label => routeData.find(point => point.label === label));
+
+            const startLatLng = arrangedRouteData[0];
+            const endLatLng = arrangedRouteData[arrangedRouteData.length - 1];
+
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: startLatLng,
+                zoom: 12
+            });
+
+            // Add markers to the map
+            var coordinates = {{ coordinates | tojson }};
+            coordinates.forEach(coord => {
+                var marker = new google.maps.Marker({
+                    position: {lat: coord.lat, lng: coord.lng},
+                    map: map,
+                    label: coord.label
+                });
+            });
+
+            marker = new google.maps.Marker({
+                position: startLatLng,
+                map: map,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    fillColor: 'blue',
+                    fillOpacity: 1,
+                    strokeWeight: 0,
+                    scale: 8 // Adjust the size of the marker
+                },
+                title: "Starting Point"
+            });
+
+            // Display and animate the route
+            findRoute(arrangedRouteData);
+        }
+
+        function findRoute(arrangedRouteData) {
+            const directionsService = new google.maps.DirectionsService();
+            const directionsRenderer = new google.maps.DirectionsRenderer();
+            directionsRenderer.setMap(map);
+
+            const waypoints = arrangedRouteData.slice(1, -1).map(point => ({
+                location: { lat: point.lat, lng: point.lng },
+                stopover: true
+            }));
+
+            const request = {
+                origin: { lat: arrangedRouteData[0].lat, lng: arrangedRouteData[0].lng },
+                destination: { lat: arrangedRouteData[arrangedRouteData.length - 1].lat, lng: arrangedRouteData[arrangedRouteData.length - 1].lng },
+                waypoints: waypoints,
+                travelMode: google.maps.TravelMode.DRIVING
+            };
+
+            directionsService.route(request, function(response, status) {
+                if (status == google.maps.DirectionsStatus.OK) {
+                    const route = response.routes[0];
+                    const path = route.overview_path.map(function(obj) {
+                        return { lat: obj.lat(), lng: obj.lng() };
+                    });
+
+                    pathPolyline = new google.maps.Polyline({
+                        path: path,
+                        geodesic: true,
+                        strokeColor: '#FF00FF',
+                        strokeOpacity: 0.5,
+                        strokeWeight: 4
+                    });
+                    pathPolyline.setMap(map);
+
+                    animateMarker(path);
+                } else {
+                    alert('Directions request failed due to ' + status);
+                }
+            });
+        }
+
+        function animateMarker(path) {
+            let index = 0;
+
+            function moveMarker() {
+                if (index < path.length) {
+                    marker.setPosition(path[index]);
+                    map.panTo(path[index]);
+                    index++;
+                    animationTimeout = setTimeout(moveMarker, 1000 / numSteps); // Calculate time per step using updated numSteps value
+                } else {
+                    index = 0; // Loop the animation
+                    animationTimeout = setTimeout(moveMarker, 1000 / numSteps); // Calculate time per step using updated numSteps value
+                }
+            }
+            moveMarker();
+        }
+
+        function changeSpeed() {
+            const speedInput = document.getElementById('speed');
+            numSteps = parseInt(speedInput.value);
+            clearTimeout(animationTimeout); // Stop current animation loop
+            initMap(); // Restart animation with new speed
+        }
+
+        function updatePath() {
+            var startNode = document.getElementById('startNode').value;
+            var endNode = document.getElementById('endNode').value;
+            fetch('/update_path', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ startNode: startNode, endNode: endNode })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('shortestPathInfo').innerHTML = data.shortest_path_info;
+                route= data.shortest_path;
+                initMap(route);
+            })
+            .catch(error => console.error('Error:', error));        
+        }
+    </script>
+</body>
+</html>
