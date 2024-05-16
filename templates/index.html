@@ -1,248 +1,94 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Route Finder</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map Selector</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         #map {
-            /* height: 70vh;
-            width: 95%; */
             height: 500px;
             border-radius: 10px;
             overflow: hidden;
             box-shadow: 0 5px 10px rgba(0.2, 0.2, 0.2, 1); /* Black shadow */
         }
+
+            .shadow-text {
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
     </style>
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body onload="updatePath()" style="background-color:#f2f8ec ">
-    <div class="container">
-        <div class="row">
-            <div class="col-md-6">
-                <label for="speed" class="form-label">Animation Speed:</label>
-                <input type="number" id="speed" class="form-control" min="1" max="100" value="20">
-            </div>
-            <div class="col-md-6">
-                <button onclick="changeSpeed()" class="btn btn-primary mt-4">Apply Speed</button>
-            </div>
-        </div>
-        <div id="map" class="mt-4"></div>
-
-        <!-- Display the graph image -->
-        <img src="{{ img_path }}" alt="Graph" class="img-fluid">
-        <hr>
-
-        <!-- Form to choose start and end nodes -->
-        <div class="row">
-            <div class="col-md-6">
-                <h2>Select Start Node</h2>
-                <select id="startNode" name="startNode" class="form-select">
-                    {% for node in nodes %}
-                    <option value="{{ node }}" {% if node == default_start_node %}selected{% endif %}>{{ node }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-6">
-                <h2>Select End Node</h2>
-                <select id="endNode" name="endNode" class="form-select">
-                    {% for node in nodes %}
-                    <option value="{{ node }}" {% if node == default_end_node %}selected{% endif %}>{{ node }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-        </div>
+<body style="background-color:#f8f3ec ">
+    <div class="container mt-5">
+        <h1 class="text-center  shadow-text">Shortest Route Delivery: Efficient Path Optimization</h1>
+        <h2 class="text-danger shadow-text">Select Points on Map</h2>
+        <div id="map"></div>
         <div class="text-center mt-4">
-            <button type="button" onclick="updatePath()" class="btn btn-success">Update Path</button>
+            <button id="submitBtn" class="btn btn-success" onclick="changeColor()">Submit</button>
+
+<script>
+    function changeColor() {
+        document.getElementById("submitBtn").classList.remove("btn-success");
+        document.getElementById("submitBtn").classList.add("btn-secondary");
+        document.getElementById("submitBtn").disabled = true; // Optionally disable the button to prevent multiple clicks
+    }
+</script>
+
+            <a href="/result" class="btn btn-primary">Go to Result Page</a>
         </div>
-        <hr>
-
-        <!-- Print the shortest path and distance -->
-        <h2>Shortest Path Information</h2>
-        <p id="shortestPathInfo" class="lead"></p>
     </div>
-
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Google Maps API -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAkrFYkxmtHZHod1Xd2b7OkGFsnto59oyQ&libraries=geometry,directions"></script>
     <script>
-        let map;
-        let marker;
-        let numSteps = 20; // Default animation speed
-        let animationTimeout; // To hold reference to current animation loop
-        let pathPolyline;
-        let previousPathPolyline = null; // To hold reference to the previous path polyline
-        let route = []; // To hold the current route
-    
-        var routeData = {{ coordinates | tojson }};
-    
-        function initMap(route) {
-            const routeSequence = route; // Customize route sequence here
-            const arrangedRouteData = routeSequence.map(label => routeData.find(point => point.label === label));
-        
-            const startLatLng = arrangedRouteData[0];
-        
-            if (!map) {
-                map = new google.maps.Map(document.getElementById('map'), {
-                    center: startLatLng,
-                    zoom: 13
-                });
-            } else {
-                map.setCenter(startLatLng);
-            }
-        
-            // Clear the previous marker and stop the animation if any
-            if (previousPathPolyline) {
-                previousPathPolyline.setMap(null);
-            }
-            clearTimeout(animationTimeout);
-        
-            // Add markers to the map
-            var coordinates = {{ coordinates | tojson }};
-            coordinates.forEach(coord => {
-                new google.maps.Marker({
-                    position: {lat: coord.lat, lng: coord.lng},
-                    map: map,
-                    label: coord.label
-                });
+        var map;
+        var selectedPoints = [];
+        var markers = [];
+
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 26.1712329, lng: 92.6713551 },
+                zoom: 12
             });
-        
-            // Create or update the blue marker position
-            if (!marker) {
-                createMarker(startLatLng);
-            } else {
-                marker.setMap(map); // Ensure marker is visible on the map
-                marker.setPosition(startLatLng);
-            }
-        
-            // Display and animate the route
-            findRoute(arrangedRouteData);
+
+            map.addListener('click', function(event) {
+                addMarker(event.latLng);
+            });
+
+            document.getElementById('submitBtn').addEventListener('click', function() {
+                savePoints(selectedPoints);
+                this.classList.add('btn-primary'); // Change button color to blue
+            });
         }
-        
-    
-        // Create the blue marker
-        function createMarker(position) {
-            marker = new google.maps.Marker({
-                position: position,
+
+        function addMarker(location) {
+            var marker = new google.maps.Marker({
+                position: location,
                 map: map,
-                icon: {
-                    path: google.maps.SymbolPath.CIRCLE,
-                    fillColor: 'blue',
-                    fillOpacity: 1,
-                    strokeWeight: 0,
-                    scale: 8 // Adjust the size of the marker
-                },
-                title: "Starting Point"
+                label: String.fromCharCode(65 + markers.length)
+            });
+
+            markers.push(marker);
+            selectedPoints.push({ lat: location.lat(), lng: location.lng(), label: marker.label });
+            
+            marker.addListener('click', function() {
+                alert("Marker Label: " + marker.label);
             });
         }
-    
-        function findRoute(arrangedRouteData) {
-            const directionsService = new google.maps.DirectionsService();
-            const directionsRenderer = new google.maps.DirectionsRenderer();
-            directionsRenderer.setMap(map);
-    
-            const waypoints = arrangedRouteData.slice(1, -1).map(point => ({
-                location: { lat: point.lat, lng: point.lng },
-                stopover: true
-            }));
-    
-            const request = {
-                origin: { lat: arrangedRouteData[0].lat, lng: arrangedRouteData[0].lng },
-                destination: { lat: arrangedRouteData[arrangedRouteData.length - 1].lat, lng: arrangedRouteData[arrangedRouteData.length - 1].lng },
-                waypoints: waypoints,
-                travelMode: google.maps.TravelMode.DRIVING
-            };
-    
-            directionsService.route(request, function(response, status) {
-                if (status == google.maps.DirectionsStatus.OK) {
-                    const route = response.routes[0];
-                    const path = route.overview_path.map(function(obj) {
-                        return { lat: obj.lat(), lng: obj.lng() };
-                    });
-    
-                    if (pathPolyline) {
-                        pathPolyline.setMap(null);
-                    }
-                    pathPolyline = new google.maps.Polyline({
-                        path: path,
-                        geodesic: true,
-                        strokeColor: '#FF00FF',
-                        strokeOpacity: 0.5,
-                        strokeWeight: 4
-                    });
-                    pathPolyline.setMap(map);
-    
-                    previousPathPolyline = pathPolyline;
-    
-                    animateMarker(path);
-                } else {
-                    alert('Directions request failed due to ' + status);
-                }
-            });
-        }
-    
-        function animateMarker(path) {
-            let index = 0;
-    
-            function moveMarker() {
-                if (index < path.length) {
-                    marker.setPosition(path[index]);
-                    map.panTo(path[index]);
-                    index++;
-                    animationTimeout = setTimeout(moveMarker, 1000 / numSteps); // Calculate time per step using updated numSteps value
-                } else {
-                    index = 0; // Loop the animation
-                    animationTimeout = setTimeout(moveMarker, 1000 / numSteps); // Calculate time per step using updated numSteps value
-                }
-            }
-            moveMarker();
-        }
-    
-        function changeSpeed() {
-            const speedInput = document.getElementById('speed');
-            numSteps = parseInt(speedInput.value);
-            clearTimeout(animationTimeout); // Stop current animation loop
-            if (route.length > 0) {
-                initMap(route); // Restart animation with new speed
-            }
-        }
-    
-        function updatePath() {
-            var startNode = document.getElementById('startNode').value;
-            var endNode = document.getElementById('endNode').value;
-            fetch('/update_path', {
+
+        function savePoints(points) {
+            fetch('/save_points', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ startNode: startNode, endNode: endNode })
+                body: JSON.stringify(points)
             })
             .then(response => response.json())
             .then(data => {
-                document.getElementById('shortestPathInfo').innerHTML = data.shortest_path_info;
-                route = data.shortest_path;
-        
-                // Clear animation
-                clearTimeout(animationTimeout);
-        
-                // Clear previous path
-                if (previousPathPolyline) {
-                    previousPathPolyline.setMap(null);
-                }
-        
-                // Remove previous marker if exists
-                if (marker) {
-                    marker.setMap(null);
-                }
-        
-                // Initialize map with new route
-                initMap(route);
+                alert(data.message);
+                location.reload();
             })
-            .catch(error => console.error('Error:', error));        
+            .catch(error => console.error('Error:', error));
         }
-        
     </script>
-    
-
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAkrFYkxmtHZHod1Xd2b7OkGFsnto59oyQ&callback=initMap"></script>
 </body>
 </html>
