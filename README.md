@@ -3,6 +3,11 @@
 # Shortest-Route-Delivery-Efficient-Path-Optimization
 Finding the Shortest Path using Breadth-First Search (BFS)
 
+##Selecting pointers
+<img src='static/pointers.png'>
+
+##Result Page
+<img src='static/result.png'>
 
 # Flask Application for Distance Calculation and Shortest Path Visualization
 
@@ -82,10 +87,6 @@ python app.py
 
 
 
-##Selecting pointers
-<img src='static/pointers.png'>
 
-##Result Page
-<img src='static/result.png'>
 
 
